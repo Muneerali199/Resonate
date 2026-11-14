@@ -20,6 +20,16 @@ import 'package:resonate/utils/ui_sizes.dart';
 
 import 'stories_test_helpers.dart';
 
+class _TrackingLiveChapter extends FakeLiveChapter {
+  _TrackingLiveChapter(super.state);
+
+  int leaveRoomCalls = 0;
+
+  @override
+  Future<void> leaveRoom() async {
+    leaveRoomCalls++;
+  }
+}
 
 Future<void> pumpLiveChapterPage(
   WidgetTester tester, {
@@ -76,27 +86,30 @@ List<Override> liveChapterOverrides({
   String authorUid = 'author',
   List<LiveChapterAttendee> attendees = const [],
   bool isMicOn = false,
-}) => [
-  currentUserProvider.overrideWithValue(fakeAuthUser(uid: viewerUid)),
-  requireUserProvider.overrideWithValue(fakeAuthUser(uid: viewerUid)),
-  liveKitControllerProvider.overrideWith(FakeLiveKitController.new),
-  liveChapterProvider.overrideWith(
-    () => FakeLiveChapter(
-      LiveChapterState(
-        isMicOn: isMicOn,
-        model: fakeLiveChapterModel(
-          authorUid: authorUid,
-          chapterTitle: 'Night Shift',
-          attendees: LiveChapterAttendeesModel(
-            liveChapterId: 'room-1',
-            users: attendees,
-            userIds: [for (final user in attendees) user.id],
-          ),
-        ),
+  LiveChapter Function(LiveChapterState state)? liveChapterBuilder,
+}) {
+  final state = LiveChapterState(
+    isMicOn: isMicOn,
+    model: fakeLiveChapterModel(
+      authorUid: authorUid,
+      chapterTitle: 'Night Shift',
+      attendees: LiveChapterAttendeesModel(
+        liveChapterId: 'room-1',
+        users: attendees,
+        userIds: [for (final user in attendees) user.id],
       ),
     ),
-  ),
-];
+  );
+
+  return [
+    currentUserProvider.overrideWithValue(fakeAuthUser(uid: viewerUid)),
+    requireUserProvider.overrideWithValue(fakeAuthUser(uid: viewerUid)),
+    liveKitControllerProvider.overrideWith(FakeLiveKitController.new),
+    liveChapterProvider.overrideWith(
+      () => liveChapterBuilder?.call(state) ?? FakeLiveChapter(state),
+    ),
+  ];
+}
 
 Finder control(SessionControlKind kind) =>
     find.byKey(ValueKey('session-control-${kind.name}'));
@@ -200,5 +213,38 @@ void main() {
 
     expect(find.text('Are you sure?'), findsOneWidget);
     expect(find.byType(LiveChapterPage), findsOneWidget);
+  });
+
+  testStoryWidget('system back runs the listener leave flow', (tester) async {
+    late _TrackingLiveChapter coordinator;
+    await pumpLiveChapterPage(
+      tester,
+      overrides: liveChapterOverrides(
+        viewerUid: 'u2',
+        attendees: [attendee('u2', 'Bob Jones')],
+        liveChapterBuilder: (state) =>
+            coordinator = _TrackingLiveChapter(state),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Are you sure?'), findsOneWidget);
+    expect(coordinator.leaveRoomCalls, 0);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LiveChapterPage), findsOneWidget);
+    expect(coordinator.leaveRoomCalls, 0);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm'));
+    await tester.pumpAndSettle();
+
+    expect(coordinator.leaveRoomCalls, 1);
   });
 }

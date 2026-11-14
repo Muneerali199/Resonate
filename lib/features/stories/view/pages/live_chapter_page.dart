@@ -33,30 +33,37 @@ class LiveChapterPage extends ConsumerWidget {
 
     final isAdmin = model.authorUid == ref.watch(currentUserProvider)?.uid;
 
-    return Scaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SessionAppBar(
-            icon: Icons.arrow_back,
-            onPressed: () => leaveLiveChapter(context, ref, isAdmin: isAdmin),
-          ),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: UiSizes.width_20),
-            child: SessionHeader(
-              title: model.chapterTitle,
-              description: model.chapterDescription,
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await leaveLiveChapter(context, ref, isAdmin: isAdmin);
+      },
+      child: Scaffold(
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SessionAppBar(
+              icon: Icons.arrow_back,
+              onPressed: () => leaveLiveChapter(context, ref, isAdmin: isAdmin),
             ),
-          ),
-          SizedBox(height: UiSizes.height_16),
-          Expanded(
-            child: _Stage(
-              model: model,
-              isAdmin: isAdmin,
-              authorMicOn: isAdmin ? liveState.isMicOn : null,
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: UiSizes.width_20),
+              child: SessionHeader(
+                title: model.chapterTitle,
+                description: model.chapterDescription,
+              ),
             ),
-          ),
-        ],
+            SizedBox(height: UiSizes.height_16),
+            Expanded(
+              child: _Stage(
+                model: model,
+                isAdmin: isAdmin,
+                authorMicOn: isAdmin ? liveState.isMicOn : null,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
